@@ -9,7 +9,7 @@
 	"inRepository": true,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-04-27 15:11:51"
+	"lastUpdated": "2026-09-24 22:03:07"
 }
 
 /*
@@ -135,6 +135,12 @@ function remapPrefix(uri) {
 	return uri;
 }
 
+/**
+ * Update URI prefixes from definitions in the document
+ *
+ * This looks for schema references in `<link>` elements and in `@prefix` attributes in the `<html>` and `<head>` elements
+ * @param {Document} doc The full document
+ */
 function getPrefixes(doc) {
 	var links = doc.getElementsByTagName("link");
 	for (let i = 0; i < links.length; i++) {
@@ -163,11 +169,14 @@ function getPrefixes(doc) {
 	}
 }
 
-// Boolean Parameters (default values false)
-//   * strict = false: compare only ending substring, e.g. bepress
-//   * strict = true: compare exactly
-//   * all = false: return only first match
-//   * all = true: concatenate all values
+/**
+ * Extract text from `<meta>` element(s) by its (partial) name
+ *
+ * @param {Document} doc   The full document
+ * @param {string} name    The meta name
+ * @param {boolean} strict Match `name` exactly if `true`, use `name` as suffix otherwise
+ * @param {boolean} all    Concatenate all values using commas if `true`, return the first value otherwise
+ */
 function getContentText(doc, name, strict, all) {
 	let csspath = 'html>head>meta[name' + (strict ? '="' : '$="') + name + '"]';
 	if (all) {
@@ -178,6 +187,14 @@ function getContentText(doc, name, strict, all) {
 	}
 }
 
+/**
+ * Get `<meta>` elements by their (partial) name
+ *
+ * @param {Document} doc   The full document
+ * @param {string} name    The meta name
+ * @param {boolean} strict Match `name` exactly if `true`, use `name` as suffix otherwise
+ * @return {Element[]}     An array of matching elements
+ */
 function getContent(doc, name, strict) {
 	var xpath = '/x:html'
 		+ '/*[local-name() = "head" or local-name() = "body"]'
@@ -187,6 +204,11 @@ function getContent(doc, name, strict) {
 	return ZU.xpath(doc, xpath + '@content | ' + xpath + '@contents', namespaces);
 }
 
+/**
+ * Apply title-case to an author name if it is all lowercase or all uppercase
+ * @param {string} authorName The author name
+ * @return {string} The (potentially) updated author name
+ */
 function fixCase(authorName) {
 	// fix case if all upper or all lower case
 	if (authorName.toUpperCase() === authorName
@@ -197,6 +219,14 @@ function fixCase(authorName) {
 	return authorName;
 }
 
+/**
+ * Populate item properties from the `<meta>` elements mapped in `fieldMap`
+ *
+ * @param {Document} doc The full document
+ * @param {Z.Item}   item The new item being constructed
+ * @param {Map<string, string>} fieldMap Mapping of non-Zotero field names to Zotero field names
+ * @param {boolean} strict Use field names exactly
+ */
 function processFields(doc, item, fieldMap, strict) {
 	for (var metaName in fieldMap) {
 		var zoteroName = fieldMap[metaName];
@@ -233,6 +263,14 @@ function detectWeb(doc, url) {
 	init(doc, url, Zotero.done);
 }
 
+/**
+ * Start type detection or import, depending on the given callback function
+ *
+ * @param {Document} doc The full document
+ * @param {string}   url The URL of the document
+ * @param {function} callback A function to call next
+ * @param {boolean}  forceLoadRDF If `true`, load the RDF importer translator into the global `RDF`
+ */
 function init(doc, url, callback, forceLoadRDF) {
 	getPrefixes(doc);
 
@@ -396,7 +434,11 @@ function importRDF(doc) {
 }
 
 /**
- * Adds HighWire metadata and completes the item
+ * Add HighWire metadata
+ *
+ * @param {Document} doc   The full document
+ * @param {Z.Item} newItem The item being constructed
+ * @param {Z.ItemType} hwType The item type
  */
 function addHighwireMetadata(doc, newItem, hwType) {
 	// HighWire metadata
@@ -568,7 +610,15 @@ function addHighwireMetadata(doc, newItem, hwType) {
 	}
 }
 
-// process highwire creators; currently only editor and author, but easy to extend
+/**
+ * Process Highwire creators
+ *
+ * Currently only covers editor and author, but this can be extended.
+ * @param {NodeList} creatorNodes Document nodes containing creator name(s)
+ * @param {Z.CreatorType}  role         The Zotero role type ("author", "editor", etc.)
+ * @param {Document}       doc          The full document
+ * @return {Array<Z.Creator<role>>} Zotero Creators
+ */
 function processHighwireCreators(creatorNodes, role, doc) {
 	let itemCreators = [];
 	let lastCreator = null;
@@ -623,6 +673,12 @@ function processHighwireCreators(creatorNodes, role, doc) {
 	return itemCreators;
 }
 
+/**
+ * Add or update metadata embedded by Parsely
+ *
+ * @param {Document} doc The HTML document
+ * @param {Z.Item} newItem  The new item being constructed
+ */
 function addOtherMetadata(doc, newItem) {
 	// Scrape parsely metadata http://parsely.com/api/crawler.html
 	var parselyJSON = ZU.xpathText(doc, '(//x:meta[@name="parsely-page"]/@content)[1]', namespaces);
@@ -663,6 +719,12 @@ function addOtherMetadata(doc, newItem) {
 	}
 }
 
+/**
+ * Add metadata as a fallback from less reliable elements
+ *
+ * @param {Document} doc The HTML document
+ * @param {Z.Item} newItem  The new item being constructed
+ */
 function addLowQualityMetadata(doc, newItem) {
 	// if we don't have a creator, look for byline on the page
 	// but first, we're desperate for a title
@@ -737,9 +799,15 @@ function addLowQualityMetadata(doc, newItem) {
 	newItem.accessDate = 'CURRENT_TIMESTAMP';
 }
 
-/* returns an array of objects of Og authors, but only where they do not contain a URL to prevent getting facebook profiles
-In a worst case scenario, where real authors and social media profiles are mixed, we might miss some, but that's still
-preferable to garbage */
+/**
+ * Parse author information from Open Graph tags
+ *
+ * but only where they do not contain a URL to prevent getting Facebook profiles
+ * In a worst case scenario, where real authors and social media profiles are mixed,
+ * we might miss some, but that's still preferable to garbage
+ * @param {Document} doc the HTML document
+ * @return {Array<Object>|null} Author(s) if found, or `null`
+ */
 function tryOgAuthors(doc) {
 	var authors = [];
 	var ogAuthors = ZU.xpath(doc, '//meta[@property="article:author" or @property="video:director" or @property="music:musician"]');
@@ -751,6 +819,12 @@ function tryOgAuthors(doc) {
 	return authors.length ? authors : null;
 }
 
+/**
+ * Try to find author name(s) in a by-line
+ *
+ * @param {Document} doc the HTML document
+ * @param {Z.Item} newItem  the new item being constructed
+ */
 function getAuthorFromByline(doc, newItem) {
 	var bylineClasses = ['byline', 'bylines', 'vcard', 'article-byline'];
 	Z.debug("Looking for authors in " + bylineClasses.join(', '));
@@ -927,10 +1001,15 @@ function getAuthorFromByline(doc, newItem) {
 }
 
 
-/** If we already have tags - run through them one by one,
+/**
+ * Clean up various potentially dirty fields.
+ *
+ * If we already have tags - run through them one by one,
  * split where necessary and concat them.
  * This will deal with multiple tags, some of them comma delimited,
  * some semicolon, some individual
+ * @param {Document} doc The full document
+ * @param {Z.Item}   newItem The item being constructed
  */
 function finalDataCleanup(doc, newItem) {
 	if (typeof newItem.tags == 'string') {
@@ -990,6 +1069,12 @@ function finalDataCleanup(doc, newItem) {
 	if (!newItem.title && !Zotero.parentTranslator) newItem.title = newItem.url;
 }
 
+/**
+ * Make sure a URL is absolute.
+ * @param {Document} doc The full document
+ * @param {string}   url The URL to ensure is absolute
+ * @return {string} The absolute URL
+ */
 function relativeToAbsolute(doc, url) {
 	if (ZU.resolveURL) {
 		return ZU.resolveURL(url);
